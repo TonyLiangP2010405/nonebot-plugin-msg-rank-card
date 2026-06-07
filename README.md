@@ -11,7 +11,7 @@
 _✨ 每日水群排行榜图片生成插件 ✨_
 
 <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/BigCherryBalls/nonebot-plugin-msg-rank-card.svg" alt="license">
+    <img src="https://img.shields.io/github/license/TonyLiangP2010405/nonebot-plugin-msg-rank-card.svg" alt="license">
 </a>
 <a href="https://pypi.python.org/pypi/nonebot-plugin-msg-rank-card">
     <img src="https://img.shields.io/pypi/v/nonebot-plugin-msg-rank-card.svg" alt="pypi">
@@ -22,7 +22,7 @@ _✨ 每日水群排行榜图片生成插件 ✨_
 
 ## 📖 介绍
 
-本插件基于 [MsgRankCard](https://github.com/BigCherryBalls/MsgRankCard) 项目改写，是一个 NoneBot2 插件，用于记录群聊消息并生成精美的每日水群排行榜图片。
+本插件基于 [MsgRankCard](https://github.com/TonyLiangP2010405/MsgRankCard) 项目改写，是一个 NoneBot2 插件，用于记录群聊消息并生成精美的每日水群排行榜图片。
 
 功能特点：
 - 📝 自动记录群聊消息数量和在线时长
@@ -101,4 +101,4 @@ plugins = ["nonebot_plugin_msg_rank_card"]
 
 ## 📄 许可证
 
-本项目基于 [MsgRankCard](https://github.com/BigCherryBalls/MsgRankCard) 改写，采用 MIT 许可证。
+本项目基于 [MsgRankCard](https://github.com/TonyLiangP2010405/MsgRankCard) 改写，采用 MIT 许可证。

@@ -6,7 +6,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [
-    { name = "BigCherryBalls", email = "" },
+    { name = "TonyLiangP2010405", email = "" },
 ]
 keywords = ["nonebot", "nonebot2", "plugin", "rank", "card", "message"]
 classifiers = [
@@ -33,8 +33,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/BigCherryBalls/nonebot-plugin-msg-rank-card"
-Repository = "https://github.com/BigCherryBalls/nonebot-plugin-msg-rank-card"
+Homepage = "https://github.com/TonyLiangP2010405/nonebot-plugin-msg-rank-card"
+Repository = "https://github.com/TonyLiangP2010405/nonebot-plugin-msg-rank-card"
 
 [tool.nonebot]
 plugins = ["nonebot_plugin_msg_rank_card"]

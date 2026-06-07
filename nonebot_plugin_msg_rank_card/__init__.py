@@ -13,7 +13,7 @@ __plugin_meta__ = PluginMetadata(
     description="记录群聊消息，生成精美的每日水群排行榜图片",
     usage="发送 /水群榜 或 /msgrank 查看今日排行榜",
     type="application",
-    homepage="https://github.com/BigCherryBalls/nonebot-plugin-msg-rank-card",
+    homepage="https://github.com/TonyLiangP2010405/nonebot-plugin-msg-rank-card",
     config=Config,
     supported_adapters={"~onebot.v11"},
 )
