@@ -103,20 +103,32 @@ class RankCardGenerator:
         return ttfs[0] if ttfs else None
 
     def _load_font(self, size: int) -> ImageFont.FreeTypeFont:
-        """加载字体"""
+        system_fonts = [
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+            "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/simhei.ttf",
+        ]
+        for font_path in system_fonts:
+            try:
+                return ImageFont.truetype(font_path, size)
+            except Exception:
+                continue
         if self.font_file:
             try:
                 return ImageFont.truetype(str(self.font_file), size)
             except Exception:
                 pass
-        # 回退到默认字体
-        try:
-            return ImageFont.truetype("/System/Library/Fonts/PingFang.ttc", size)
-        except Exception:
-            try:
-                return ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", size)
-            except Exception:
-                return ImageFont.load_default()
+        return ImageFont.load_default()
 
     def _format_time(self, seconds: int) -> str:
         """格式化时间"""

@@ -75,10 +75,12 @@ async def handle_rank(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     try:
         generator = RankCardGenerator()
         image_bytes = generator.generate_card_bytes(members)
-        await rank_cmd.finish(MessageSegment.image(image_bytes))
     except Exception as e:
         logger.error(f"生成排行榜图片失败: {e}")
         await rank_cmd.finish("生成排行榜图片失败了，请稍后再试~")
+        return
+
+    await rank_cmd.finish(MessageSegment.image(image_bytes))
 
 
 @clean_cmd.handle()
