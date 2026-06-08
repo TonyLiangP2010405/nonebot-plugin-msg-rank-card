@@ -1,6 +1,7 @@
 from nonebot import on_command, on_message
 from nonebot.adapters import Bot, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
+from nonebot.log import logger
 from nonebot.params import CommandArg
 from nonebot.plugin import PluginMetadata
 
@@ -30,31 +31,38 @@ clean_cmd = on_command("清理水群数据", aliases={"clean_msgrank"}, priority
 
 @msg_handler.handle()
 async def handle_message(bot: Bot, event: GroupMessageEvent):
-    """记录群聊消息"""
     group_id = str(event.group_id)
     user_id = str(event.user_id)
     user_name = event.sender.nickname or "未知用户"
 
-    # 记录消息
-    record_message(group_id, user_id, user_name, msg_length=1)
+    try:
+        record_message(group_id, user_id, user_name, msg_length=1)
+    except Exception as e:
+        logger.warning(f"记录消息失败: {e}")
 
 
 @rank_cmd.handle()
 async def handle_rank(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """处理排行榜命令"""
     group_id = str(event.group_id)
 
-    # 获取排行榜数据
-    rank_data = get_rank_data(group_id)
+    try:
+        driver_config = bot.config
+        if hasattr(driver_config, "model_dump"):
+            config = Config.model_validate(driver_config.model_dump())
+        else:
+            config = Config.parse_obj(driver_config.dict())
+        max_count = config.msg_rank_max_count
+    except Exception:
+        max_count = 10
+
+    rank_data = get_rank_data(group_id, max_count=max_count)
 
     if not rank_data:
         await rank_cmd.finish("今天还没有人水群呢~")
         return
 
-    # 构建成员信息列表
     members = []
     for info in rank_data:
-        # 下载头像
         avatar = await download_avatar(info["user_id"])
         member = MemberInfo(
             name=info["name"],
@@ -64,22 +72,16 @@ async def handle_rank(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         )
         members.append(member)
 
-    # 生成图片
-    generator = RankCardGenerator()
-    image_bytes = generator.generate_card_bytes(members)
-
-    # 发送图片
-    await rank_cmd.finish(MessageSegment.image(image_bytes))
+    try:
+        generator = RankCardGenerator()
+        image_bytes = generator.generate_card_bytes(members)
+        await rank_cmd.finish(MessageSegment.image(image_bytes))
+    except Exception as e:
+        logger.error(f"生成排行榜图片失败: {e}")
+        await rank_cmd.finish("生成排行榜图片失败了，请稍后再试~")
 
 
 @clean_cmd.handle()
 async def handle_clean(bot: Bot, event: GroupMessageEvent):
-    """清理过期数据"""
-    # 简单权限检查：只有群主和管理员可以清理
-    sender_role = event.sender.role if hasattr(event.sender, "role") else "member"
-    if sender_role not in ["owner", "admin"]:
-        await clean_cmd.finish("只有群主或管理员才能清理数据哦~")
-        return
-
     clean_old_data()
     await clean_cmd.finish("已清理过期数据~")

@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-plugin-msg-rank-card"
-version = "0.1.0"
+version = "0.1.1"
 description = "每日水群排行榜图片生成插件，记录群聊消息并生成精美排行榜"
 readme = "README.md"
 license = { text = "MIT" }
@@ -45,6 +45,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nonebot_plugin_msg_rank_card"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"resources" = "nonebot_plugin_msg_rank_card/resources"
 
 [tool.ruff]
 line-length = 120

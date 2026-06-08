@@ -11,19 +11,27 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .config import Config
 
-# 资源目录（默认值，会在首次使用时根据配置更新）
 _resource_dir: Path = Path(__file__).parent.parent / "resources"
+_resource_dir_initialized = False
+
+
+def _get_config() -> Config:
+    try:
+        driver_config = get_driver().config
+        if hasattr(driver_config, "model_dump"):
+            return Config.model_validate(driver_config.model_dump())
+        return Config.parse_obj(driver_config.dict())
+    except Exception:
+        return Config()
 
 
 def _get_resource_dir() -> Path:
-    """获取资源目录（延迟加载）"""
-    global _resource_dir
-    try:
-        config = Config.parse_obj(get_driver().config.dict())
+    global _resource_dir, _resource_dir_initialized
+    if not _resource_dir_initialized:
+        config = _get_config()
         if config.msg_rank_resource_path:
             _resource_dir = Path(config.msg_rank_resource_path)
-    except Exception:
-        pass
+        _resource_dir_initialized = True
     return _resource_dir
 
 
@@ -220,8 +228,7 @@ class RankCardGenerator:
     def generate_card(self, members: list[MemberInfo], title: Optional[str] = None) -> Image.Image:
         """生成排行榜图片"""
         try:
-            config = Config.parse_obj(get_driver().config.dict())
-            title = title or config.msg_rank_title
+            title = title or _get_config().msg_rank_title
         except Exception:
             title = title or "今日水群排行榜"
 
@@ -247,8 +254,7 @@ class RankCardGenerator:
         draw.text((title_x, 30), title, fill=(255, 0, 255, 255), font=title_font)
 
         # 绘制成员卡片
-        size = min(len(self.frame_files), len(members))
-        for idx in range(size):
+        for idx in range(min(len(members), 10)):
             frame_path = self.frame_files[idx] if idx < len(self.frame_files) else None
             card = self._draw_member_card(members[idx], frame_path, title_font)
             # 粘贴到背景上

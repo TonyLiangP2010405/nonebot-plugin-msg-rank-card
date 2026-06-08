@@ -8,20 +8,26 @@ from nonebot.log import logger
 
 from .config import Config
 
-# 数据目录（默认值，会在首次使用时根据配置更新）
 _data_dir: Path = Path("data/msg_rank")
+_data_dir_initialized = False
+
+
+def _get_config() -> Config:
+    try:
+        driver_config = get_driver().config
+        if hasattr(driver_config, "model_dump"):
+            return Config.model_validate(driver_config.model_dump())
+        return Config.parse_obj(driver_config.dict())
+    except Exception:
+        return Config()
 
 
 def _get_data_dir() -> Path:
-    """获取数据目录（延迟加载）"""
-    global _data_dir
-    if not _data_dir.exists():
-        try:
-            config = Config.parse_obj(get_driver().config.dict())
-            _data_dir = Path(config.msg_rank_data_path)
-        except Exception:
-            _data_dir = Path("data/msg_rank")
+    global _data_dir, _data_dir_initialized
+    if not _data_dir_initialized:
+        _data_dir = Path(_get_config().msg_rank_data_path)
         _data_dir.mkdir(parents=True, exist_ok=True)
+        _data_dir_initialized = True
     return _data_dir
 
 
@@ -104,10 +110,8 @@ def get_rank_data(group_id: str, max_count: int = 10) -> list[dict]:
 
 
 def clean_old_data(days: int = 7):
-    """清理过期数据"""
     try:
-        config = Config.parse_obj(get_driver().config.dict())
-        if not config.msg_rank_auto_clean:
+        if not _get_config().msg_rank_auto_clean:
             return
     except Exception:
         pass
