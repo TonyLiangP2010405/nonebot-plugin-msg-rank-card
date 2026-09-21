@@ -250,8 +250,14 @@ class RankCardGenerator:
         except Exception:
             title = title or "今日水群排行榜"
 
-        # 创建背景
-        if self.bg_files:
+        # 优先使用第一名的头像作为背景。
+        if members and members[0].head_pic:
+            try:
+                bg_image = members[0].head_pic.copy().convert("RGBA")
+                background = self._format_bg_image(bg_image)
+            except Exception:
+                background = Image.new("RGBA", (BG_WIDTH, BG_HEIGHT), (255, 255, 255, 255))
+        elif self.bg_files:
             try:
                 bg_path = random.choice(self.bg_files)
                 bg_image = Image.open(bg_path).convert("RGBA")

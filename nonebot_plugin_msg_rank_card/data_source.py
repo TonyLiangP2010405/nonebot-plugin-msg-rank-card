@@ -1,8 +1,8 @@
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from nonebot import get_driver
 from nonebot.log import logger
@@ -38,21 +38,31 @@ def get_today_str() -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
-def get_group_data_file(group_id: str) -> Path:
+def get_data_dir() -> Path:
+    """获取已初始化的数据目录"""
+    return _get_data_dir()
+
+
+def get_group_data_file(group_id: str, day: Optional[date] = None) -> Path:
     """获取群数据文件路径"""
-    return _get_data_dir() / f"{group_id}_{get_today_str()}.json"
+    date_str = day.strftime("%Y%m%d") if day else get_today_str()
+    return _get_data_dir() / f"{group_id}_{date_str}.json"
+
+
+def _load_data_file(file_path: Path) -> dict:
+    if file_path.exists():
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception as e:
+            logger.warning(f"加载群数据失败 {file_path.name}: {e}")
+    return {}
 
 
 def load_group_data(group_id: str) -> dict:
     """加载群数据"""
-    file_path = get_group_data_file(group_id)
-    if file_path.exists():
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning(f"加载群数据失败: {e}")
-    return {}
+    return _load_data_file(get_group_data_file(group_id))
 
 
 def save_group_data(group_id: str, data: dict):
@@ -133,6 +143,40 @@ def get_rank_data(group_id: str, max_count: int = 10) -> list[dict]:
     return _build_rank_data(load_group_data(group_id), max_count)
 
 
+def get_period_rank_data(
+    group_id: str,
+    period: str,
+    max_count: int = 10,
+    current_day: Optional[date] = None,
+) -> list[dict]:
+    """获取今日、本周或本月的汇总排行榜。"""
+    today = current_day or datetime.now().date()
+    if period == "daily":
+        start_day = today
+    elif period == "weekly":
+        start_day = today - timedelta(days=today.weekday())
+    elif period == "monthly":
+        start_day = today.replace(day=1)
+    else:
+        raise ValueError(f"不支持的排行榜周期: {period}")
+
+    aggregated: dict[str, dict[str, Any]] = {}
+    day = start_day
+    while day <= today:
+        daily_data = _load_data_file(get_group_data_file(group_id, day))
+        for user_id, info in daily_data.items():
+            member = aggregated.setdefault(
+                user_id,
+                {"name": "未知用户", "msg_count": 0, "time_seconds": 0},
+            )
+            member["name"] = info.get("name", member["name"])
+            member["msg_count"] += info.get("msg_count", 0)
+            member["time_seconds"] += info.get("time_seconds", 0)
+        day += timedelta(days=1)
+
+    return _build_rank_data(aggregated, max_count)
+
+
 def _load_rank_change_settings() -> dict[str, bool]:
     settings_path = _get_data_dir() / _rank_change_settings_file
     if not settings_path.exists():
@@ -168,15 +212,17 @@ def set_rank_change_notify(group_id: str, enabled: bool):
     temp_path.replace(settings_path)
 
 
-def clean_old_data(days: int = 7):
+def clean_old_data(days: Optional[int] = None):
     try:
-        if not _get_config().msg_rank_auto_clean:
+        config = _get_config()
+        if not config.msg_rank_auto_clean:
             return
+        retention_days = days if days is not None else max(31, config.msg_rank_data_retention_days)
     except Exception:
-        pass
+        retention_days = days if days is not None else 35
 
     data_dir = _get_data_dir()
-    cutoff = datetime.now() - timedelta(days=days)
+    cutoff = datetime.now() - timedelta(days=retention_days)
     cutoff_str = cutoff.strftime("%Y%m%d")
 
     for file_path in data_dir.glob("*_*.json"):
