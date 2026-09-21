@@ -11,7 +11,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .config import Config
 
-_resource_dir: Path = Path(__file__).parent.parent / "resources"
+_packaged_resource_dir = Path(__file__).parent / "resources"
+_source_resource_dir = Path(__file__).parent.parent / "resources"
+_resource_dir: Path = _packaged_resource_dir if _packaged_resource_dir.exists() else _source_resource_dir
 _resource_dir_initialized = False
 
 
@@ -85,14 +87,18 @@ class RankCardGenerator:
         self._initialized = True
 
         self.bg_files = self._get_files(_get_bg_dir(), "bg")
-        self.frame_files = self._get_files(_get_frame_dir(), "frame")
+        self.frame_files = self._get_files(_get_frame_dir())
         self.font_file = self._get_first_ttf()
 
-    def _get_files(self, dir_path: Path, name_filter: str) -> list[Path]:
+    def _get_files(self, dir_path: Path, name_filter: str = "") -> list[Path]:
         """获取目录下的文件"""
         if not dir_path.exists() or not dir_path.is_dir():
             return []
-        return [f for f in dir_path.iterdir() if f.is_file() and name_filter in f.name]
+        files = [f for f in dir_path.iterdir() if f.is_file() and name_filter in f.name]
+        return sorted(
+            files,
+            key=lambda path: (0, int(path.stem)) if path.stem.isdigit() else (1, path.name.lower()),
+        )
 
     def _get_first_ttf(self) -> Optional[Path]:
         """获取第一个 ttf 字体文件"""
