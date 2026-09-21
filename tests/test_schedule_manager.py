@@ -77,4 +77,6 @@ def test_scheduled_rank_is_sent(monkeypatch):
 
     asyncio.run(schedule_manager._run_scheduled_rank("10001", "weekly", "999"))
 
-    assert sent[0]["group_id"] == 10001
+    assert len(sent) == 2
+    assert sent[0] == {"group_id": 10001, "message": "正在放送周报。。。"}
+    assert sent[1]["group_id"] == 10001

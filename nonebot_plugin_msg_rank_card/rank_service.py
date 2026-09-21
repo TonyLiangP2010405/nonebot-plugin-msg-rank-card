@@ -11,6 +11,11 @@ PERIOD_TITLES = {
     "weekly": "本周水群排行榜",
     "monthly": "本月水群排行榜",
 }
+PERIOD_BROADCASTS = {
+    "daily": "正在放送日报。。。",
+    "weekly": "正在放送周报。。。",
+    "monthly": "正在放送月报。。。",
+}
 
 
 def get_plugin_config() -> Config:
@@ -29,6 +34,13 @@ def get_max_count() -> int:
 
 def get_rank_for_period(group_id: str, period: str) -> list[dict]:
     return get_period_rank_data(group_id, period, max_count=get_max_count())
+
+
+def get_broadcast_text(period: str) -> str:
+    try:
+        return PERIOD_BROADCASTS[period]
+    except KeyError as e:
+        raise ValueError(f"不支持的排行榜周期: {period}") from e
 
 
 async def generate_rank_card(rank_data: list[dict], period: str = "daily") -> bytes:

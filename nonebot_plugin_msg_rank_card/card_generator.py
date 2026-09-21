@@ -1,5 +1,6 @@
 import contextlib
 import random
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,18 @@ _packaged_resource_dir = Path(__file__).parent / "resources"
 _source_resource_dir = Path(__file__).parent.parent / "resources"
 _resource_dir: Path = _packaged_resource_dir if _packaged_resource_dir.exists() else _source_resource_dir
 _resource_dir_initialized = False
+BEIJING_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
+
+
+def get_beijing_time_text(current_time: Optional[datetime] = None) -> str:
+    """生成排行榜上显示的北京时间。"""
+    if current_time is None:
+        current_time = datetime.now(BEIJING_TIMEZONE)
+    elif current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=BEIJING_TIMEZONE)
+    else:
+        current_time = current_time.astimezone(BEIJING_TIMEZONE)
+    return current_time.strftime("北京时间 %H:%M")
 
 
 def _get_config() -> Config:
@@ -243,7 +256,12 @@ class RankCardGenerator:
 
         return card
 
-    def generate_card(self, members: list[MemberInfo], title: Optional[str] = None) -> Image.Image:
+    def generate_card(
+        self,
+        members: list[MemberInfo],
+        title: Optional[str] = None,
+        timestamp: Optional[str] = None,
+    ) -> Image.Image:
         """生成排行榜图片"""
         try:
             title = title or _get_config().msg_rank_title
@@ -275,7 +293,15 @@ class RankCardGenerator:
         bbox = draw.textbbox((0, 0), title, font=title_font)
         title_width = bbox[2] - bbox[0]
         title_x = (BG_WIDTH - title_width) // 2
-        draw.text((title_x, 30), title, fill=(255, 0, 255, 255), font=title_font)
+        draw.text((title_x, 20), title, fill=(255, 0, 255, 255), font=title_font)
+
+        # 绘制当前北京时间
+        timestamp = timestamp or get_beijing_time_text()
+        timestamp_font = self._load_font(22)
+        timestamp_bbox = draw.textbbox((0, 0), timestamp, font=timestamp_font)
+        timestamp_width = timestamp_bbox[2] - timestamp_bbox[0]
+        timestamp_x = (BG_WIDTH - timestamp_width) // 2
+        draw.text((timestamp_x, 90), timestamp, fill=(80, 80, 80, 255), font=timestamp_font)
 
         # 绘制成员卡片
         for idx in range(min(len(members), 10)):
@@ -283,14 +309,19 @@ class RankCardGenerator:
             card = self._draw_member_card(members[idx], frame_path, title_font)
             # 粘贴到背景上
             card_x = (BG_WIDTH - CARD_WIDTH) // 2
-            card_y = 120 + 95 * idx
+            card_y = 125 + 95 * idx
             background.paste(card, (card_x, card_y), card)
 
         return background
 
-    def generate_card_bytes(self, members: list[MemberInfo], title: Optional[str] = None) -> bytes:
+    def generate_card_bytes(
+        self,
+        members: list[MemberInfo],
+        title: Optional[str] = None,
+        timestamp: Optional[str] = None,
+    ) -> bytes:
         """生成排行榜图片并返回 bytes"""
-        image = self.generate_card(members, title)
+        image = self.generate_card(members, title, timestamp)
         buffer = BytesIO()
         image.convert("RGB").save(buffer, format="PNG")
         return buffer.getvalue()

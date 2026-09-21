@@ -10,7 +10,7 @@ from nonebot.log import logger
 from nonebot_plugin_apscheduler import scheduler
 
 from .data_source import clean_old_data, get_data_dir
-from .rank_service import generate_rank_card, get_rank_for_period
+from .rank_service import generate_rank_card, get_broadcast_text, get_rank_for_period
 
 _SCHEDULE_FILE = "rank-schedules.json"
 _JOB_PREFIX = "msg-rank-card"
@@ -149,6 +149,10 @@ async def _run_scheduled_rank(group_id: str, period: str, bot_id: str):
             logger.info(f"排行榜定时发送跳过：群 {group_id} 暂无数据")
             return
         image_bytes = await generate_rank_card(rank_data, period)
+        await bot.send_group_msg(
+            group_id=int(group_id),
+            message=get_broadcast_text(period),
+        )
         await bot.send_group_msg(
             group_id=int(group_id),
             message=MessageSegment.image(image_bytes),
