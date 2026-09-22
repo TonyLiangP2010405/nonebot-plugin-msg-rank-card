@@ -72,6 +72,8 @@ HEAD_WIDTH = 60
 HEAD_HEIGHT = 60
 HEAD_X = 20
 HEAD_Y = 10
+# 卡片右侧排名图案占用的宽度，行内文字需要避开
+RANK_BADGE_WIDTH = 70
 
 
 class MemberInfo:
@@ -85,6 +87,7 @@ class MemberInfo:
         head_pic: Image.Image | None = None,
         affection: int | None = None,
         affection_title: str = "",
+        affection_note: str | None = None,
     ):
         self.name = name
         self.msg_count = msg_count
@@ -92,6 +95,7 @@ class MemberInfo:
         self.head_pic = head_pic
         self.affection = affection
         self.affection_title = affection_title
+        self.affection_note = affection_note
 
 
 class RankCardGenerator:
@@ -176,6 +180,25 @@ class RankCardGenerator:
             parts.append(f"{remaining}秒")
 
         return "".join(parts)
+
+    def _truncate_text(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        font: ImageFont.FreeTypeFont,
+        max_width: int,
+    ) -> str:
+        """按可用宽度截断文本，超出部分用省略号代替"""
+        if max_width <= 0 or not text:
+            return ""
+        if draw.textlength(text, font=font) <= max_width:
+            return text
+        trimmed = text
+        while trimmed:
+            trimmed = trimmed[:-1]
+            if draw.textlength(f"{trimmed}…", font=font) <= max_width:
+                return f"{trimmed}…"
+        return ""
 
     def _format_bg_image(self, image: Image.Image) -> Image.Image:
         """格式化背景图：缩放并裁剪到指定尺寸，添加半透明遮罩"""
@@ -268,12 +291,30 @@ class RankCardGenerator:
 
         if member.affection is not None:
             affection_title = member.affection_title[:6]
+            affection_text = f"馒头好感 {member.affection} · {affection_title}"
             draw.text(
                 (255, 50),
-                f"馒头好感 {member.affection} · {affection_title}",
+                affection_text,
                 fill=(214, 79, 126, 255),
                 font=count_font,
             )
+
+            note = (member.affection_note or "").strip()
+            if note:
+                note_font = self._load_font(14)
+                note_prefix = "· "
+                note_x = 255 + round(draw.textlength(affection_text, font=count_font)) + 8
+                note_room = CARD_WIDTH - RANK_BADGE_WIDTH - note_x - round(
+                    draw.textlength(note_prefix, font=note_font)
+                )
+                note_text = self._truncate_text(draw, note, note_font, note_room)
+                if note_text:
+                    draw.text(
+                        (note_x, 51),
+                        f"{note_prefix}{note_text}",
+                        fill=(150, 110, 128, 255),
+                        font=note_font,
+                    )
 
         # 绘制时长（右对齐）
         time_str = self._format_time(member.time_seconds)
