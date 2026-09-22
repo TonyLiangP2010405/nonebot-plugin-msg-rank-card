@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 import contextlib
 import random
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
 
 import httpx
 from nonebot import get_driver
@@ -19,7 +20,7 @@ _resource_dir_initialized = False
 BEIJING_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 
-def get_beijing_time_text(current_time: Optional[datetime] = None) -> str:
+def get_beijing_time_text(current_time: datetime | None = None) -> str:
     """生成排行榜上显示的北京时间。"""
     if current_time is None:
         current_time = datetime.now(BEIJING_TIMEZONE)
@@ -76,11 +77,21 @@ HEAD_Y = 10
 class MemberInfo:
     """成员信息"""
 
-    def __init__(self, name: str, msg_count: int, time_seconds: int, head_pic: Optional[Image.Image] = None):
+    def __init__(
+        self,
+        name: str,
+        msg_count: int,
+        time_seconds: int,
+        head_pic: Image.Image | None = None,
+        affection: int | None = None,
+        affection_title: str = "",
+    ):
         self.name = name
         self.msg_count = msg_count
         self.time_seconds = time_seconds
         self.head_pic = head_pic
+        self.affection = affection
+        self.affection_title = affection_title
 
 
 class RankCardGenerator:
@@ -113,7 +124,7 @@ class RankCardGenerator:
             key=lambda path: (0, int(path.stem)) if path.stem.isdigit() else (1, path.name.lower()),
         )
 
-    def _get_first_ttf(self) -> Optional[Path]:
+    def _get_first_ttf(self) -> Path | None:
         """获取第一个 ttf 字体文件"""
         ttf_dir = _get_ttf_dir()
         if not ttf_dir.exists() or not ttf_dir.is_dir():
@@ -203,7 +214,12 @@ class RankCardGenerator:
                 mask.putpixel((x, y), alpha)
         return mask
 
-    def _draw_member_card(self, member: MemberInfo, frame_path: Optional[Path], font: ImageFont.FreeTypeFont) -> Image.Image:
+    def _draw_member_card(
+        self,
+        member: MemberInfo,
+        frame_path: Path | None,
+        font: ImageFont.FreeTypeFont,
+    ) -> Image.Image:
         """绘制单个成员卡片"""
         # 创建卡片背景
         card = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), (255, 255, 255, 255))
@@ -250,17 +266,28 @@ class RankCardGenerator:
         # 绘制消息数
         draw.text((100, 50), f"消息数: {member.msg_count}条", fill=(80, 80, 80, 255), font=count_font)
 
+        if member.affection is not None:
+            affection_title = member.affection_title[:6]
+            draw.text(
+                (255, 50),
+                f"馒头好感 {member.affection} · {affection_title}",
+                fill=(214, 79, 126, 255),
+                font=count_font,
+            )
+
         # 绘制时长（右对齐）
         time_str = self._format_time(member.time_seconds)
-        draw.text((440, 40), time_str, fill=(100, 100, 100, 255), font=time_font)
+        time_bbox = draw.textbbox((0, 0), time_str, font=time_font)
+        time_x = CARD_WIDTH - 20 - (time_bbox[2] - time_bbox[0])
+        draw.text((time_x, 15), time_str, fill=(100, 100, 100, 255), font=time_font)
 
         return card
 
     def generate_card(
         self,
         members: list[MemberInfo],
-        title: Optional[str] = None,
-        timestamp: Optional[str] = None,
+        title: str | None = None,
+        timestamp: str | None = None,
     ) -> Image.Image:
         """生成排行榜图片"""
         try:
@@ -317,8 +344,8 @@ class RankCardGenerator:
     def generate_card_bytes(
         self,
         members: list[MemberInfo],
-        title: Optional[str] = None,
-        timestamp: Optional[str] = None,
+        title: str | None = None,
+        timestamp: str | None = None,
     ) -> bytes:
         """生成排行榜图片并返回 bytes"""
         image = self.generate_card(members, title, timestamp)
@@ -327,7 +354,7 @@ class RankCardGenerator:
         return buffer.getvalue()
 
 
-async def download_avatar(user_id: str) -> Optional[Image.Image]:
+async def download_avatar(user_id: str) -> Image.Image | None:
     """下载用户头像"""
     try:
         url = f"https://q1.qlogo.cn/g?b=qq&nk={user_id}&s=640"

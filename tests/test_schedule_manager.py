@@ -62,8 +62,9 @@ def test_scheduled_rank_is_sent(monkeypatch):
         async def send_group_msg(self, **kwargs):
             sent.append(kwargs)
 
-    async def fake_generate(rank_data, period):
+    async def fake_generate(rank_data, period, group_id):
         assert period == "weekly"
+        assert group_id == "10001"
         assert rank_data[0]["user_id"] == "1"
         return b"image"
 

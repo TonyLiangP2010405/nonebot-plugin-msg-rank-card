@@ -148,7 +148,7 @@ async def _run_scheduled_rank(group_id: str, period: str, bot_id: str):
         if not rank_data:
             logger.info(f"排行榜定时发送跳过：群 {group_id} 暂无数据")
             return
-        image_bytes = await generate_rank_card(rank_data, period)
+        image_bytes = await generate_rank_card(rank_data, period, group_id)
         await bot.send_group_msg(
             group_id=int(group_id),
             message=get_broadcast_text(period),

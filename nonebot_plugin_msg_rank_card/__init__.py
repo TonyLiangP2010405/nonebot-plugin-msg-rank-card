@@ -93,7 +93,7 @@ async def handle_message(bot: Bot, event: GroupMessageEvent):
 
     try:
         rank_data = get_rank_for_period(group_id, "daily")
-        image_bytes = await generate_rank_card(rank_data, "daily")
+        image_bytes = await generate_rank_card(rank_data, "daily", group_id)
         await bot.send(
             event,
             f"{get_broadcast_text('daily')}\n当前检测到排名变化，重新发送最新榜单：",
@@ -113,7 +113,7 @@ async def handle_rank(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         return
 
     try:
-        image_bytes = await generate_rank_card(rank_data, "daily")
+        image_bytes = await generate_rank_card(rank_data, "daily", group_id)
     except Exception as e:
         logger.error(f"生成排行榜图片失败: {e}")
         await rank_cmd.finish("生成排行榜图片失败了，请稍后再试~")
@@ -131,7 +131,7 @@ async def handle_weekly_rank(event: GroupMessageEvent):
         await weekly_rank_cmd.finish("本周还没有人水群呢~")
         return
     try:
-        image_bytes = await generate_rank_card(rank_data, "weekly")
+        image_bytes = await generate_rank_card(rank_data, "weekly", group_id)
     except Exception as e:
         logger.error(f"生成周排行榜图片失败: {e}")
         await weekly_rank_cmd.finish("生成周排行榜图片失败了，请稍后再试~")
@@ -148,7 +148,7 @@ async def handle_monthly_rank(event: GroupMessageEvent):
         await monthly_rank_cmd.finish("本月还没有人水群呢~")
         return
     try:
-        image_bytes = await generate_rank_card(rank_data, "monthly")
+        image_bytes = await generate_rank_card(rank_data, "monthly", group_id)
     except Exception as e:
         logger.error(f"生成月排行榜图片失败: {e}")
         await monthly_rank_cmd.finish("生成月排行榜图片失败了，请稍后再试~")
