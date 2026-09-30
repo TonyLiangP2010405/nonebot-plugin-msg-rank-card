@@ -165,11 +165,20 @@ class RankCardGenerator:
         return ImageFont.load_default()
 
     def _format_time(self, seconds: int) -> str:
-        """格式化时间"""
+        """格式化时间，超过24小时时按天显示"""
         seconds = max(0, seconds)
-        hours = seconds // 3600
+        days = seconds // 86400
+        hours = (seconds % 86400) // 3600
         minutes = (seconds % 3600) // 60
         remaining = seconds % 60
+
+        if days > 0:
+            parts = [f"{days}天"]
+            if hours > 0:
+                parts.append(f"{hours}时")
+            if minutes > 0:
+                parts.append(f"{minutes}分")
+            return "".join(parts)
 
         parts = []
         if hours > 0:
@@ -329,8 +338,9 @@ class RankCardGenerator:
         members: list[MemberInfo],
         title: str | None = None,
         timestamp: str | None = None,
+        date_range: str | None = None,
     ) -> Image.Image:
-        """生成排行榜图片"""
+        """生成排行榜图片，date_range 为统计起止范围文本（如 统计 09-28 ~ 09-30）"""
         try:
             title = title or _get_config().msg_rank_title
         except Exception:
@@ -369,7 +379,17 @@ class RankCardGenerator:
         timestamp_bbox = draw.textbbox((0, 0), timestamp, font=timestamp_font)
         timestamp_width = timestamp_bbox[2] - timestamp_bbox[0]
         timestamp_x = (BG_WIDTH - timestamp_width) // 2
-        draw.text((timestamp_x, 90), timestamp, fill=(80, 80, 80, 255), font=timestamp_font)
+        timestamp_y = 86 if date_range else 90
+        draw.text((timestamp_x, timestamp_y), timestamp, fill=(80, 80, 80, 255), font=timestamp_font)
+
+        # 绘制统计起止范围（周报/月报）
+        cards_top = 125
+        if date_range:
+            range_font = self._load_font(16)
+            range_bbox = draw.textbbox((0, 0), date_range, font=range_font)
+            range_x = (BG_WIDTH - (range_bbox[2] - range_bbox[0])) // 2
+            draw.text((range_x, 112), date_range, fill=(100, 100, 100, 255), font=range_font)
+            cards_top = 140
 
         # 绘制成员卡片
         for idx in range(min(len(members), 10)):
@@ -377,7 +397,7 @@ class RankCardGenerator:
             card = self._draw_member_card(members[idx], frame_path, title_font)
             # 粘贴到背景上
             card_x = (BG_WIDTH - CARD_WIDTH) // 2
-            card_y = 125 + 95 * idx
+            card_y = cards_top + 95 * idx
             background.paste(card, (card_x, card_y), card)
 
         return background
@@ -387,9 +407,10 @@ class RankCardGenerator:
         members: list[MemberInfo],
         title: str | None = None,
         timestamp: str | None = None,
+        date_range: str | None = None,
     ) -> bytes:
         """生成排行榜图片并返回 bytes"""
-        image = self.generate_card(members, title, timestamp)
+        image = self.generate_card(members, title, timestamp, date_range)
         buffer = BytesIO()
         image.convert("RGB").save(buffer, format="PNG")
         return buffer.getvalue()

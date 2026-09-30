@@ -14,7 +14,13 @@ from .data_source import (
     record_message_and_check_rank_change,
     set_rank_change_notify,
 )
-from .rank_service import generate_rank_card, get_broadcast_text, get_max_count, get_rank_for_period
+from .rank_service import (
+    build_report_message,
+    generate_rank_card,
+    get_broadcast_text,
+    get_max_count,
+    get_rank_for_period,
+)
 
 require("nonebot_plugin_apscheduler")
 
@@ -136,7 +142,7 @@ async def handle_weekly_rank(event: GroupMessageEvent):
         logger.error(f"生成周排行榜图片失败: {e}")
         await weekly_rank_cmd.finish("生成周排行榜图片失败了，请稍后再试~")
         return
-    await weekly_rank_cmd.send(get_broadcast_text("weekly"))
+    await weekly_rank_cmd.send(build_report_message("weekly", rank_data))
     await weekly_rank_cmd.finish(MessageSegment.image(image_bytes))
 
 
@@ -153,7 +159,7 @@ async def handle_monthly_rank(event: GroupMessageEvent):
         logger.error(f"生成月排行榜图片失败: {e}")
         await monthly_rank_cmd.finish("生成月排行榜图片失败了，请稍后再试~")
         return
-    await monthly_rank_cmd.send(get_broadcast_text("monthly"))
+    await monthly_rank_cmd.send(build_report_message("monthly", rank_data))
     await monthly_rank_cmd.finish(MessageSegment.image(image_bytes))
 
 

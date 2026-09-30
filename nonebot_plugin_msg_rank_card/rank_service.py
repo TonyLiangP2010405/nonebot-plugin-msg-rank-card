@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime, timedelta
 from typing import NamedTuple
 
 from nonebot import get_driver
+from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.log import logger
 from nonebot.plugin import get_plugin_by_module_name
 
@@ -48,6 +50,30 @@ def get_broadcast_text(period: str) -> str:
         return PERIOD_BROADCASTS[period]
     except KeyError as e:
         raise ValueError(f"不支持的排行榜周期: {period}") from e
+
+
+def get_period_date_range(period: str, today: date | None = None) -> str | None:
+    """统计起止范围文本，日报不显示返回 None。"""
+    if period == "daily":
+        return None
+    today = today or datetime.now().date()
+    if period == "weekly":
+        start_day = today - timedelta(days=today.weekday())
+    elif period == "monthly":
+        start_day = today.replace(day=1)
+    else:
+        raise ValueError(f"不支持的排行榜周期: {period}")
+    return f"统计 {start_day.strftime('%m-%d')} ~ {today.strftime('%m-%d')}"
+
+
+def build_report_message(period: str, rank_data: list[dict]) -> Message | str:
+    """构造播报消息，周报/月报附带 @上榜成员，日报返回纯文本。"""
+    text = get_broadcast_text(period)
+    if period == "daily" or not rank_data:
+        return text
+    segments = [MessageSegment.text(text)]
+    segments.extend(MessageSegment.at(str(info["user_id"])) for info in rank_data)
+    return Message(segments)
 
 
 class AffectionDisplay(NamedTuple):
@@ -105,4 +131,6 @@ async def generate_rank_card(
     ]
     generator = RankCardGenerator()
     title = get_plugin_config().msg_rank_title if period == "daily" else PERIOD_TITLES[period]
-    return await asyncio.to_thread(generator.generate_card_bytes, members, title)
+    return await asyncio.to_thread(
+        generator.generate_card_bytes, members, title, date_range=get_period_date_range(period)
+    )

@@ -31,6 +31,30 @@ def render_member_card(generator, note):
     return generator.generate_card([member], "今日水群排行榜", "北京时间 09:05")
 
 
+def test_format_time_switches_to_days_over_24_hours():
+    RankCardGenerator._instance = None
+    generator = RankCardGenerator()
+
+    assert generator._format_time(90061) == "1天1时1分"
+    assert generator._format_time(86400) == "1天"
+    assert generator._format_time(86460) == "1天1分"
+    assert generator._format_time(86399) == "23时59分59秒"
+    assert generator._format_time(3661) == "1时1分1秒"
+
+
+def test_date_range_is_drawn_below_timestamp():
+    RankCardGenerator._instance = None
+    generator = RankCardGenerator()
+    avatar = Image.new("RGBA", (100, 100), (220, 10, 10, 255))
+    members = [MemberInfo("浅夏柚子", 128, 3661, avatar)]
+
+    with_range = generator.generate_card(members, "本周水群排行榜", "北京时间 09:05", date_range="统计 09-28 ~ 09-30")
+    without_range = generator.generate_card(members, "本周水群排行榜", "北京时间 09:05")
+
+    band = (0, 100, BG_WIDTH, 145)
+    assert with_range.crop(band).tobytes() != without_range.crop(band).tobytes()
+
+
 def test_bundled_card_resources_are_found():
     RankCardGenerator._instance = None
     generator = RankCardGenerator()

@@ -55,6 +55,54 @@ def test_schedule_is_persisted_and_job_is_created(monkeypatch, tmp_path):
                 scheduler.remove_job(job.id)
 
 
+def test_scheduled_weekly_mentions_ranked_members(monkeypatch):
+    sent = []
+
+    class FakeBot:
+        async def send_group_msg(self, **kwargs):
+            sent.append(kwargs)
+
+    async def fake_generate(rank_data, period, group_id):
+        return b"image"
+
+    monkeypatch.setattr(schedule_manager, "_find_bot", lambda bot_id: FakeBot())
+    monkeypatch.setattr(
+        schedule_manager,
+        "get_rank_for_period",
+        lambda group_id, period: [{"user_id": "1"}, {"user_id": "2"}],
+    )
+    monkeypatch.setattr(schedule_manager, "generate_rank_card", fake_generate)
+
+    asyncio.run(schedule_manager._run_scheduled_rank("10001", "weekly", "999"))
+
+    first = sent[0]["message"]
+    assert first[0].data["text"] == "正在放送周报。。。"
+    assert [seg.data["qq"] for seg in first if seg.type == "at"] == ["1", "2"]
+
+
+def test_scheduled_daily_has_no_mentions(monkeypatch):
+    sent = []
+
+    class FakeBot:
+        async def send_group_msg(self, **kwargs):
+            sent.append(kwargs)
+
+    async def fake_generate(rank_data, period, group_id):
+        return b"image"
+
+    monkeypatch.setattr(schedule_manager, "_find_bot", lambda bot_id: FakeBot())
+    monkeypatch.setattr(
+        schedule_manager,
+        "get_rank_for_period",
+        lambda group_id, period: [{"user_id": "1"}],
+    )
+    monkeypatch.setattr(schedule_manager, "generate_rank_card", fake_generate)
+
+    asyncio.run(schedule_manager._run_scheduled_rank("10001", "daily", "999"))
+
+    assert sent[0]["message"] == "正在放送日报。。。"
+
+
 def test_scheduled_rank_is_sent(monkeypatch):
     sent = []
 
@@ -79,5 +127,6 @@ def test_scheduled_rank_is_sent(monkeypatch):
     asyncio.run(schedule_manager._run_scheduled_rank("10001", "weekly", "999"))
 
     assert len(sent) == 2
-    assert sent[0] == {"group_id": 10001, "message": "正在放送周报。。。"}
+    assert sent[0]["group_id"] == 10001
+    assert sent[0]["message"][0].data["text"] == "正在放送周报。。。"
     assert sent[1]["group_id"] == 10001

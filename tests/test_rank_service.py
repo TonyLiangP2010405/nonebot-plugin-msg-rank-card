@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from datetime import date
 from types import ModuleType, SimpleNamespace
 
 from PIL import Image
@@ -97,13 +98,51 @@ def test_old_affection_plugin_without_note_api(monkeypatch):
     assert (display.affection, display.title, display.note) == (42, "春心萌动", "")
 
 
+def test_get_period_date_range():
+    day = date(2026, 9, 30)  # 周三
+
+    assert rank_service.get_period_date_range("daily", day) is None
+    assert rank_service.get_period_date_range("weekly", day) == "统计 09-28 ~ 09-30"
+    assert rank_service.get_period_date_range("monthly", day) == "统计 09-01 ~ 09-30"
+
+
+def test_build_report_message_mentions_ranked_members_for_weekly():
+    message = rank_service.build_report_message("weekly", [{"user_id": "1"}, {"user_id": "2"}])
+
+    assert message[0].data["text"] == "正在放送周报。。。"
+    assert [seg.data["qq"] for seg in message if seg.type == "at"] == ["1", "2"]
+
+
+def test_build_report_message_returns_plain_text_for_daily():
+    assert rank_service.build_report_message("daily", [{"user_id": "1"}]) == "正在放送日报。。。"
+
+
+def test_weekly_card_receives_date_range(monkeypatch):
+    monkeypatch.setattr(rank_service, "get_plugin_by_module_name", lambda name: None)
+    monkeypatch.setattr(rank_service, "download_avatar", fake_avatar)
+    captured = {}
+
+    class RecordingGenerator:
+        def generate_card_bytes(self, members, title, date_range=None):
+            captured["date_range"] = date_range
+            return b"image-bytes"
+
+    monkeypatch.setattr(rank_service, "RankCardGenerator", RecordingGenerator)
+
+    asyncio.run(rank_service.generate_rank_card(sample_rank_data(), "weekly", "10001"))
+    assert captured["date_range"] == rank_service.get_period_date_range("weekly")
+
+    asyncio.run(rank_service.generate_rank_card(sample_rank_data(), "daily", "10001"))
+    assert captured["date_range"] is None
+
+
 def test_members_carry_affection_note(monkeypatch):
     install_affection_stub(monkeypatch)
     monkeypatch.setattr(rank_service, "download_avatar", fake_avatar)
     captured = {}
 
     class RecordingGenerator:
-        def generate_card_bytes(self, members, title):
+        def generate_card_bytes(self, members, title, date_range=None):
             captured["members"] = members
             return b"image-bytes"
 
