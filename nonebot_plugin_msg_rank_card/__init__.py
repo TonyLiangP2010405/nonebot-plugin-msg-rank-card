@@ -20,6 +20,7 @@ from .rank_service import (
     get_broadcast_text,
     get_max_count,
     get_rank_for_period,
+    try_start_bet,
 )
 
 require("nonebot_plugin_apscheduler")
@@ -126,7 +127,15 @@ async def handle_rank(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         return
 
     await rank_cmd.send(get_broadcast_text("daily"))
-    await rank_cmd.finish(MessageSegment.image(image_bytes))
+    await rank_cmd.send(MessageSegment.image(image_bytes))
+    await try_start_bet(
+        group_id,
+        str(event.user_id),
+        nickname=event.sender.card or event.sender.nickname or str(event.user_id),
+        rank_data=rank_data,
+        send=rank_cmd.send,
+    )
+    await rank_cmd.finish()
 
 
 @weekly_rank_cmd.handle()
@@ -143,7 +152,15 @@ async def handle_weekly_rank(event: GroupMessageEvent):
         await weekly_rank_cmd.finish("生成周排行榜图片失败了，请稍后再试~")
         return
     await weekly_rank_cmd.send(build_report_message("weekly", rank_data))
-    await weekly_rank_cmd.finish(MessageSegment.image(image_bytes))
+    await weekly_rank_cmd.send(MessageSegment.image(image_bytes))
+    await try_start_bet(
+        group_id,
+        str(event.user_id),
+        nickname=event.sender.card or event.sender.nickname or str(event.user_id),
+        rank_data=rank_data,
+        send=weekly_rank_cmd.send,
+    )
+    await weekly_rank_cmd.finish()
 
 
 @monthly_rank_cmd.handle()
@@ -160,7 +177,15 @@ async def handle_monthly_rank(event: GroupMessageEvent):
         await monthly_rank_cmd.finish("生成月排行榜图片失败了，请稍后再试~")
         return
     await monthly_rank_cmd.send(build_report_message("monthly", rank_data))
-    await monthly_rank_cmd.finish(MessageSegment.image(image_bytes))
+    await monthly_rank_cmd.send(MessageSegment.image(image_bytes))
+    await try_start_bet(
+        group_id,
+        str(event.user_id),
+        nickname=event.sender.card or event.sender.nickname or str(event.user_id),
+        rank_data=rank_data,
+        send=monthly_rank_cmd.send,
+    )
+    await monthly_rank_cmd.finish()
 
 
 @clean_cmd.handle()

@@ -98,6 +98,114 @@ def test_old_affection_plugin_without_note_api(monkeypatch):
     assert (display.affection, display.title, display.note) == (42, "春心萌动", "")
 
 
+async def fake_send(message, **kwargs):
+    return None
+
+
+def install_bet_stub(monkeypatch, *, result=True, error=None, with_api=True):
+    """注入假的馒头博弈接口，并让软依赖检查通过，返回调用记录"""
+    module = ModuleType("nonebot_plugin_mantou_affection")
+    calls = []
+
+    if with_api:
+
+        async def maybe_start_bet(group_id, user_id, *, nickname="", candidates=None, send=None):
+            calls.append(
+                {
+                    "group_id": group_id,
+                    "user_id": user_id,
+                    "nickname": nickname,
+                    "candidates": candidates,
+                    "send": send,
+                }
+            )
+            if error is not None:
+                raise error
+            return result
+
+        module.maybe_start_bet = maybe_start_bet
+
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_mantou_affection", module)
+    monkeypatch.setattr(rank_service, "get_plugin_by_module_name", lambda name: module)
+    return calls
+
+
+def test_try_start_bet_passes_rank_candidates(monkeypatch):
+    calls = install_bet_stub(monkeypatch)
+
+    started = asyncio.run(
+        rank_service.try_start_bet(
+            "10001", "9", nickname="浅夏柚子", rank_data=sample_rank_data(), send=fake_send
+        )
+    )
+
+    assert started is True
+    assert calls == [
+        {
+            "group_id": "10001",
+            "user_id": "9",
+            "nickname": "浅夏柚子",
+            "candidates": [("1", "浅夏柚子"), ("2", "阿岚")],
+            "send": fake_send,
+        }
+    ]
+
+
+def test_try_start_bet_returns_false_when_bet_is_declined(monkeypatch):
+    calls = install_bet_stub(monkeypatch, result=False)
+
+    started = asyncio.run(
+        rank_service.try_start_bet("10001", "9", rank_data=sample_rank_data(), send=fake_send)
+    )
+
+    assert started is False
+    assert len(calls) == 1
+
+
+def test_try_start_bet_is_skipped_without_plugin(monkeypatch):
+    calls = install_bet_stub(monkeypatch)
+    monkeypatch.setattr(rank_service, "get_plugin_by_module_name", lambda name: None)
+
+    started = asyncio.run(
+        rank_service.try_start_bet("10001", "9", rank_data=sample_rank_data(), send=fake_send)
+    )
+
+    assert started is False
+    assert calls == []
+
+
+def test_try_start_bet_is_skipped_without_group_or_send(monkeypatch):
+    calls = install_bet_stub(monkeypatch)
+
+    assert (
+        asyncio.run(rank_service.try_start_bet(None, "9", rank_data=sample_rank_data(), send=fake_send))
+        is False
+    )
+    assert asyncio.run(rank_service.try_start_bet("10001", "9", rank_data=sample_rank_data())) is False
+    assert calls == []
+
+
+def test_try_start_bet_swallows_plugin_errors(monkeypatch):
+    install_bet_stub(monkeypatch, error=RuntimeError("博弈服务不可用"))
+
+    started = asyncio.run(
+        rank_service.try_start_bet("10001", "9", rank_data=sample_rank_data(), send=fake_send)
+    )
+
+    assert started is False
+
+
+def test_try_start_bet_is_skipped_when_plugin_has_no_bet_api(monkeypatch):
+    calls = install_bet_stub(monkeypatch, with_api=False)
+
+    started = asyncio.run(
+        rank_service.try_start_bet("10001", "9", rank_data=sample_rank_data(), send=fake_send)
+    )
+
+    assert started is False
+    assert calls == []
+
+
 def test_get_period_date_range():
     day = date(2026, 9, 30)  # 周三
 

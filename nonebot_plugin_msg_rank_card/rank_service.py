@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from nonebot import get_driver
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
@@ -108,6 +109,37 @@ async def _get_affection_note(group_id: str, user_id: str) -> str:
     except Exception as error:
         logger.debug(f"[msg-rank-card] 读取馒头短评失败: {error}")
         return ""
+
+
+async def try_start_bet(
+    group_id: str | None,
+    user_id: str,
+    *,
+    nickname: str = "",
+    rank_data: list[dict] | None = None,
+    send: Callable[..., Awaitable[Any]] | None = None,
+) -> bool:
+    """请馒头插件按概率触发「馒头博弈」，未安装馒头或调用失败时返回 False。"""
+    if not group_id or send is None:
+        return False
+    if get_plugin_by_module_name("nonebot_plugin_mantou_affection") is None:
+        return False
+    candidates = [(str(info["user_id"]), str(info["name"])) for info in rank_data or []]
+    try:
+        from nonebot_plugin_mantou_affection import maybe_start_bet
+
+        return bool(
+            await maybe_start_bet(
+                group_id,
+                user_id,
+                nickname=nickname,
+                candidates=candidates,
+                send=send,
+            )
+        )
+    except Exception as error:
+        logger.debug(f"[msg-rank-card] 触发馒头博弈失败: {error}")
+        return False
 
 
 async def generate_rank_card(
