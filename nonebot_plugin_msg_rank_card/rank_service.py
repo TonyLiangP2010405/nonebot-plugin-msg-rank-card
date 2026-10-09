@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
 from typing import Any, NamedTuple
@@ -15,6 +16,9 @@ from .config import Config
 from .data_source import get_period_rank_data
 
 RANK_NOTE_SCENE = "msg_rank_card.rank"
+
+DAILY_RANK_CACHE_SECONDS = 30
+_daily_rank_cache: dict[str, tuple[float, list[dict]]] = {}
 
 PERIOD_TITLES = {
     "daily": "今日水群排行榜",
@@ -109,6 +113,25 @@ async def _get_affection_note(group_id: str, user_id: str) -> str:
     except Exception as error:
         logger.debug(f"[msg-rank-card] 读取馒头短评失败: {error}")
         return ""
+
+
+def get_cached_daily_rank(group_id: str) -> list[dict]:
+    """带短 TTL 缓存的日榜查询：每条群消息都要判断发言者是否在榜，避免反复读数据文件。"""
+    now = time.monotonic()
+    cached = _daily_rank_cache.get(group_id)
+    if cached is not None and now - cached[0] < DAILY_RANK_CACHE_SECONDS:
+        return cached[1]
+    rank_data = get_rank_for_period(group_id, "daily")
+    _daily_rank_cache[group_id] = (now, rank_data)
+    return rank_data
+
+
+def get_member_daily_rank(group_id: str, user_id: str) -> list[dict] | None:
+    """成员当前在日榜上时返回日榜数据，不在榜上返回 None。"""
+    rank_data = get_cached_daily_rank(group_id)
+    if any(str(info["user_id"]) == user_id for info in rank_data):
+        return rank_data
+    return None
 
 
 async def try_start_bet(

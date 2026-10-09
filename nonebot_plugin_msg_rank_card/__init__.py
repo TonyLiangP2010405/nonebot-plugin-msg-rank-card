@@ -19,6 +19,7 @@ from .rank_service import (
     generate_rank_card,
     get_broadcast_text,
     get_max_count,
+    get_member_daily_rank,
     get_rank_for_period,
     try_start_bet,
 )
@@ -70,6 +71,22 @@ weekly_schedule_cmd = on_command("周榜定时", permission=SUPERUSER, priority=
 monthly_schedule_cmd = on_command("月榜定时", permission=SUPERUSER, priority=10, block=True)
 
 
+async def _maybe_start_bet(event: GroupMessageEvent, send) -> None:
+    """榜上成员发言时请馒头插件按概率触发博弈，不在榜上或未安装馒头时静默跳过。"""
+    group_id = str(event.group_id)
+    user_id = str(event.user_id)
+    rank_data = get_member_daily_rank(group_id, user_id)
+    if rank_data is None:
+        return
+    await try_start_bet(
+        group_id,
+        user_id,
+        nickname=event.sender.card or event.sender.nickname or user_id,
+        rank_data=rank_data,
+        send=send,
+    )
+
+
 @msg_handler.handle()
 async def handle_message(bot: Bot, event: GroupMessageEvent):
     group_id = str(event.group_id)
@@ -95,19 +112,19 @@ async def handle_message(bot: Bot, event: GroupMessageEvent):
         logger.warning(f"记录消息失败: {e}")
         return
 
-    if not rank_changed:
-        return
+    if rank_changed:
+        try:
+            rank_data = get_rank_for_period(group_id, "daily")
+            image_bytes = await generate_rank_card(rank_data, "daily", group_id)
+            await bot.send(
+                event,
+                f"{get_broadcast_text('daily')}\n当前检测到排名变化，重新发送最新榜单：",
+            )
+            await bot.send(event, MessageSegment.image(image_bytes))
+        except Exception as e:
+            logger.error(f"发送排名变动提醒失败: {e}")
 
-    try:
-        rank_data = get_rank_for_period(group_id, "daily")
-        image_bytes = await generate_rank_card(rank_data, "daily", group_id)
-        await bot.send(
-            event,
-            f"{get_broadcast_text('daily')}\n当前检测到排名变化，重新发送最新榜单：",
-        )
-        await bot.send(event, MessageSegment.image(image_bytes))
-    except Exception as e:
-        logger.error(f"发送排名变动提醒失败: {e}")
+    await _maybe_start_bet(event, msg_handler.send)
 
 
 @rank_cmd.handle()
@@ -127,15 +144,7 @@ async def handle_rank(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         return
 
     await rank_cmd.send(get_broadcast_text("daily"))
-    await rank_cmd.send(MessageSegment.image(image_bytes))
-    await try_start_bet(
-        group_id,
-        str(event.user_id),
-        nickname=event.sender.card or event.sender.nickname or str(event.user_id),
-        rank_data=rank_data,
-        send=rank_cmd.send,
-    )
-    await rank_cmd.finish()
+    await rank_cmd.finish(MessageSegment.image(image_bytes))
 
 
 @weekly_rank_cmd.handle()
@@ -152,15 +161,7 @@ async def handle_weekly_rank(event: GroupMessageEvent):
         await weekly_rank_cmd.finish("生成周排行榜图片失败了，请稍后再试~")
         return
     await weekly_rank_cmd.send(build_report_message("weekly", rank_data))
-    await weekly_rank_cmd.send(MessageSegment.image(image_bytes))
-    await try_start_bet(
-        group_id,
-        str(event.user_id),
-        nickname=event.sender.card or event.sender.nickname or str(event.user_id),
-        rank_data=rank_data,
-        send=weekly_rank_cmd.send,
-    )
-    await weekly_rank_cmd.finish()
+    await weekly_rank_cmd.finish(MessageSegment.image(image_bytes))
 
 
 @monthly_rank_cmd.handle()
@@ -177,15 +178,7 @@ async def handle_monthly_rank(event: GroupMessageEvent):
         await monthly_rank_cmd.finish("生成月排行榜图片失败了，请稍后再试~")
         return
     await monthly_rank_cmd.send(build_report_message("monthly", rank_data))
-    await monthly_rank_cmd.send(MessageSegment.image(image_bytes))
-    await try_start_bet(
-        group_id,
-        str(event.user_id),
-        nickname=event.sender.card or event.sender.nickname or str(event.user_id),
-        rank_data=rank_data,
-        send=monthly_rank_cmd.send,
-    )
-    await monthly_rank_cmd.finish()
+    await monthly_rank_cmd.finish(MessageSegment.image(image_bytes))
 
 
 @clean_cmd.handle()

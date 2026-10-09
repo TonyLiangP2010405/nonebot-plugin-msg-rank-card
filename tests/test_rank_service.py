@@ -206,6 +206,48 @@ def test_try_start_bet_is_skipped_when_plugin_has_no_bet_api(monkeypatch):
     assert calls == []
 
 
+def test_member_daily_rank_returns_rank_data_on_rank(monkeypatch):
+    monkeypatch.setattr(rank_service, "_daily_rank_cache", {})
+    monkeypatch.setattr(rank_service, "get_rank_for_period", lambda group_id, period: sample_rank_data())
+
+    rank_data = rank_service.get_member_daily_rank("10001", "2")
+
+    assert [info["user_id"] for info in rank_data] == ["1", "2"]
+
+
+def test_member_daily_rank_returns_none_off_rank(monkeypatch):
+    monkeypatch.setattr(rank_service, "_daily_rank_cache", {})
+    monkeypatch.setattr(rank_service, "get_rank_for_period", lambda group_id, period: sample_rank_data())
+
+    assert rank_service.get_member_daily_rank("10001", "9") is None
+
+
+def test_daily_rank_lookup_is_cached_per_group(monkeypatch):
+    monkeypatch.setattr(rank_service, "_daily_rank_cache", {})
+    queries = []
+
+    def counting_query(group_id, period):
+        queries.append((group_id, period))
+        return sample_rank_data()
+
+    monkeypatch.setattr(rank_service, "get_rank_for_period", counting_query)
+
+    rank_service.get_cached_daily_rank("10001")
+    rank_service.get_cached_daily_rank("10001")
+    rank_service.get_cached_daily_rank("20002")
+
+    assert queries == [("10001", "daily"), ("20002", "daily")]
+
+    timestamp, cached = rank_service._daily_rank_cache["10001"]
+    rank_service._daily_rank_cache["10001"] = (
+        timestamp - rank_service.DAILY_RANK_CACHE_SECONDS - 1,
+        cached,
+    )
+    rank_service.get_cached_daily_rank("10001")
+
+    assert queries == [("10001", "daily"), ("20002", "daily"), ("10001", "daily")]
+
+
 def test_get_period_date_range():
     day = date(2026, 9, 30)  # 周三
 
