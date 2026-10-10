@@ -1,11 +1,14 @@
 import asyncio
 import sys
+import time
 from datetime import date
 from types import ModuleType, SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from nonebot_plugin_msg_rank_card import rank_service
+from nonebot_plugin_msg_rank_card.config import Config
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
@@ -246,6 +249,79 @@ def test_daily_rank_lookup_is_cached_per_group(monkeypatch):
     rank_service.get_cached_daily_rank("10001")
 
     assert queries == [("10001", "daily"), ("20002", "daily"), ("10001", "daily")]
+
+
+class FakeClock:
+    """把 rank_service 的单调时钟固定下来，便于测试时间窗口边界"""
+
+    def __init__(self, now):
+        self.now = now
+
+    def monotonic(self):
+        return self.now
+
+
+def test_bet_recent_minutes_defaults_to_five(monkeypatch):
+    monkeypatch.setattr(rank_service, "get_plugin_config", lambda: Config())
+
+    assert rank_service.get_bet_recent_minutes() == 5
+
+
+@pytest.mark.parametrize(("configured", "expected"), [(0, 1), (1, 1), (60, 60), (240, 120)])
+def test_bet_recent_minutes_is_clamped(monkeypatch, configured, expected):
+    monkeypatch.setattr(
+        rank_service, "get_plugin_config", lambda: Config(msg_rank_bet_recent_minutes=configured)
+    )
+
+    assert rank_service.get_bet_recent_minutes() == expected
+
+
+def test_record_recent_speaker_marks_member_recent(monkeypatch):
+    monkeypatch.setattr(rank_service, "_recent_speakers", {})
+
+    rank_service.record_recent_speaker("10001", "1")
+
+    assert [
+        info["user_id"] for info in rank_service.filter_recent_members(sample_rank_data(), "10001", 5)
+    ] == ["1"]
+    assert rank_service.filter_recent_members(sample_rank_data(), "20002", 5) == []
+
+
+def test_filter_recent_members_drops_stale_speakers(monkeypatch):
+    monkeypatch.setattr(rank_service, "_recent_speakers", {})
+    rank_service.record_recent_speaker("10001", "1")
+    rank_service._recent_speakers[("10001", "2")] = time.monotonic() - 5 * 60 - 1
+
+    assert [
+        info["user_id"] for info in rank_service.filter_recent_members(sample_rank_data(), "10001", 5)
+    ] == ["1"]
+
+
+def test_filter_recent_members_window_boundary(monkeypatch):
+    monkeypatch.setattr(rank_service, "time", FakeClock(1000.0))
+    monkeypatch.setattr(
+        rank_service,
+        "_recent_speakers",
+        {("10001", "1"): 1000.0 - 5 * 60, ("10001", "2"): 1000.0 - 5 * 60 - 1},
+    )
+
+    assert [
+        info["user_id"] for info in rank_service.filter_recent_members(sample_rank_data(), "10001", 5)
+    ] == ["1"]
+
+
+def test_recent_speaker_table_is_pruned(monkeypatch):
+    monkeypatch.setattr(rank_service, "RECENT_SPEAKER_PRUNE_THRESHOLD", 2)
+    stale = time.monotonic() - rank_service.MAX_BET_RECENT_MINUTES * 60 - 1
+    monkeypatch.setattr(
+        rank_service,
+        "_recent_speakers",
+        {("10001", "1"): stale, ("10001", "2"): stale},
+    )
+
+    rank_service.record_recent_speaker("10001", "3")
+
+    assert list(rank_service._recent_speakers) == [("10001", "3")]
 
 
 def test_get_period_date_range():

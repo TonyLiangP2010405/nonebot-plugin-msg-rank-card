@@ -18,7 +18,11 @@ from .data_source import get_period_rank_data
 RANK_NOTE_SCENE = "msg_rank_card.rank"
 
 DAILY_RANK_CACHE_SECONDS = 30
+MIN_BET_RECENT_MINUTES = 1
+MAX_BET_RECENT_MINUTES = 120
+RECENT_SPEAKER_PRUNE_THRESHOLD = 2048
 _daily_rank_cache: dict[str, tuple[float, list[dict]]] = {}
+_recent_speakers: dict[tuple[str, str], float] = {}
 
 PERIOD_TITLES = {
     "daily": "今日水群排行榜",
@@ -44,6 +48,10 @@ def get_plugin_config() -> Config:
 
 def get_max_count() -> int:
     return max(1, min(get_plugin_config().msg_rank_max_count, 10))
+
+
+def get_bet_recent_minutes() -> int:
+    return max(MIN_BET_RECENT_MINUTES, min(get_plugin_config().msg_rank_bet_recent_minutes, MAX_BET_RECENT_MINUTES))
 
 
 def get_rank_for_period(group_id: str, period: str) -> list[dict]:
@@ -132,6 +140,25 @@ def get_member_daily_rank(group_id: str, user_id: str) -> list[dict] | None:
     if any(str(info["user_id"]) == user_id for info in rank_data):
         return rank_data
     return None
+
+
+def record_recent_speaker(group_id: str, user_id: str) -> None:
+    """记录成员最近一次发言时间，供博弈选人使用（内存级，重启后重建）。"""
+    now = time.monotonic()
+    _recent_speakers[(group_id, user_id)] = now
+    if len(_recent_speakers) > RECENT_SPEAKER_PRUNE_THRESHOLD:
+        cutoff = now - MAX_BET_RECENT_MINUTES * 60
+        for key, last_spoke in list(_recent_speakers.items()):
+            if last_spoke < cutoff:
+                del _recent_speakers[key]
+
+
+def filter_recent_members(rank_data: list[dict], group_id: str, minutes: int) -> list[dict]:
+    """只保留最近 minutes 分钟内发过言的榜上成员。"""
+    cutoff = time.monotonic() - minutes * 60
+    return [
+        info for info in rank_data if _recent_speakers.get((group_id, str(info["user_id"])), 0.0) >= cutoff
+    ]
 
 
 async def try_start_bet(

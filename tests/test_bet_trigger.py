@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import time
 from contextlib import suppress
 from types import ModuleType, SimpleNamespace
 
@@ -93,12 +94,19 @@ def prepare_message_path(monkeypatch, tmp_path, timeline, *, rank_data=None):
     monkeypatch.setattr(data_source, "_data_dir", tmp_path)
     monkeypatch.setattr(data_source, "_data_dir_initialized", True)
     monkeypatch.setattr(rank_service, "_daily_rank_cache", {})
+    monkeypatch.setattr(rank_service, "_recent_speakers", {})
     monkeypatch.setattr(plugin, "is_rank_change_notify_enabled", lambda group_id: False)
     entries = sample_rank_data() if rank_data is None else rank_data
     monkeypatch.setattr(rank_service, "get_rank_for_period", lambda group_id, period: entries)
     matcher = FakeMatcher(timeline)
     monkeypatch.setattr(plugin, "msg_handler", matcher)
     return matcher
+
+
+def make_stale_speaker(user_id, *, group_id="10001"):
+    """把成员的最近发言时间改到窗口之外"""
+    window = rank_service.get_bet_recent_minutes()
+    rank_service._recent_speakers[(group_id, user_id)] = time.monotonic() - window * 60 - 1
 
 
 def prepare_rank_command(monkeypatch, timeline, matcher_name):
@@ -121,12 +129,41 @@ def test_ranked_member_message_starts_bet(monkeypatch, tmp_path):
             "group_id": "10001",
             "user_id": "1",
             "nickname": "浅夏柚子",
-            "candidates": [("1", "浅夏柚子"), ("2", "阿岚")],
+            "candidates": [("1", "浅夏柚子")],
             "send": matcher.send,
         }
     ]
     assert timeline == ["bet"]
     assert [(item["user_id"], item["msg_count"]) for item in data_source.get_rank_data("10001")] == [("1", 1)]
+
+
+def test_recent_speakers_are_passed_as_candidates(monkeypatch, tmp_path):
+    timeline = []
+    calls = install_bet_stub(monkeypatch, timeline)
+    prepare_message_path(monkeypatch, tmp_path, timeline)
+
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=2)))
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1)))
+
+    assert [call["candidates"] for call in calls] == [
+        [("2", "阿岚")],
+        [("1", "浅夏柚子"), ("2", "阿岚")],
+    ]
+
+
+def test_stale_speaker_is_filtered_from_candidates(monkeypatch, tmp_path):
+    timeline = []
+    calls = install_bet_stub(monkeypatch, timeline)
+    prepare_message_path(monkeypatch, tmp_path, timeline)
+
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=2)))
+    make_stale_speaker("2")
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1)))
+
+    assert [call["candidates"] for call in calls] == [
+        [("2", "阿岚")],
+        [("1", "浅夏柚子")],
+    ]
 
 
 def test_unranked_member_message_does_not_start_bet(monkeypatch, tmp_path):

@@ -16,11 +16,14 @@ from .data_source import (
 )
 from .rank_service import (
     build_report_message,
+    filter_recent_members,
     generate_rank_card,
+    get_bet_recent_minutes,
     get_broadcast_text,
     get_max_count,
     get_member_daily_rank,
     get_rank_for_period,
+    record_recent_speaker,
     try_start_bet,
 )
 
@@ -78,6 +81,7 @@ async def _maybe_start_bet(event: GroupMessageEvent, send) -> None:
     rank_data = get_member_daily_rank(group_id, user_id)
     if rank_data is None:
         return
+    rank_data = filter_recent_members(rank_data, group_id, get_bet_recent_minutes())
     await try_start_bet(
         group_id,
         user_id,
@@ -93,6 +97,7 @@ async def handle_message(bot: Bot, event: GroupMessageEvent):
     user_id = str(event.user_id)
     user_name = event.sender.nickname or "未知用户"
 
+    record_recent_speaker(group_id, user_id)
     max_count = get_max_count()
     notify_enabled = is_rank_change_notify_enabled(group_id)
 

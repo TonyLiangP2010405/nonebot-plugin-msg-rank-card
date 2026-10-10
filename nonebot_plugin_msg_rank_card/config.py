@@ -15,5 +15,7 @@ class Config(BaseModel):
     msg_rank_auto_clean: bool = True
     # 数据保留天数，需要覆盖完整月榜
     msg_rank_data_retention_days: int = 35
+    # 触发馒头博弈时，只挑选最近多少分钟内发过言的榜上成员
+    msg_rank_bet_recent_minutes: int = 5
     # 排行榜标题
     msg_rank_title: str = "今日水群排行榜"
