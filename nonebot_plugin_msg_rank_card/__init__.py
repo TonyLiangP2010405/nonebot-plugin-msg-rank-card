@@ -16,13 +16,13 @@ from .data_source import (
 )
 from .rank_service import (
     build_report_message,
-    filter_recent_members,
     generate_rank_card,
     get_bet_recent_minutes,
     get_broadcast_text,
     get_max_count,
     get_member_daily_rank,
     get_rank_for_period,
+    get_recent_speakers,
     record_recent_speaker,
     try_start_bet,
 )
@@ -78,15 +78,13 @@ async def _maybe_start_bet(event: GroupMessageEvent, send) -> None:
     """榜上成员发言时请馒头插件按概率触发博弈，不在榜上或未安装馒头时静默跳过。"""
     group_id = str(event.group_id)
     user_id = str(event.user_id)
-    rank_data = get_member_daily_rank(group_id, user_id)
-    if rank_data is None:
+    if get_member_daily_rank(group_id, user_id) is None:
         return
-    rank_data = filter_recent_members(rank_data, group_id, get_bet_recent_minutes())
     await try_start_bet(
         group_id,
         user_id,
         nickname=event.sender.card or event.sender.nickname or user_id,
-        rank_data=rank_data,
+        rank_data=get_recent_speakers(group_id, get_bet_recent_minutes()),
         send=send,
     )
 
@@ -97,7 +95,7 @@ async def handle_message(bot: Bot, event: GroupMessageEvent):
     user_id = str(event.user_id)
     user_name = event.sender.nickname or "未知用户"
 
-    record_recent_speaker(group_id, user_id)
+    record_recent_speaker(group_id, user_id, event.sender.card or event.sender.nickname or "")
     max_count = get_max_count()
     notify_enabled = is_rank_change_notify_enabled(group_id)
 

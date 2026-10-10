@@ -106,7 +106,9 @@ def prepare_message_path(monkeypatch, tmp_path, timeline, *, rank_data=None):
 def make_stale_speaker(user_id, *, group_id="10001"):
     """把成员的最近发言时间改到窗口之外"""
     window = rank_service.get_bet_recent_minutes()
-    rank_service._recent_speakers[(group_id, user_id)] = time.monotonic() - window * 60 - 1
+    key = (group_id, user_id)
+    _, name = rank_service._recent_speakers[key]
+    rank_service._recent_speakers[key] = (time.monotonic() - window * 60 - 1, name)
 
 
 def prepare_rank_command(monkeypatch, timeline, matcher_name):
@@ -142,13 +144,36 @@ def test_recent_speakers_are_passed_as_candidates(monkeypatch, tmp_path):
     calls = install_bet_stub(monkeypatch, timeline)
     prepare_message_path(monkeypatch, tmp_path, timeline)
 
-    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=2)))
-    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1)))
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=2, nickname="阿岚")))
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1, card="浅夏柚子")))
 
     assert [call["candidates"] for call in calls] == [
         [("2", "阿岚")],
         [("1", "浅夏柚子"), ("2", "阿岚")],
     ]
+
+
+def test_candidates_include_recent_speakers_off_rank(monkeypatch, tmp_path):
+    timeline = []
+    calls = install_bet_stub(monkeypatch, timeline)
+    prepare_message_path(monkeypatch, tmp_path, timeline)
+
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=9, card="过路人")))
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1)))
+
+    assert calls[0]["user_id"] == "1"
+    assert calls[0]["candidates"] == [("1", "阿岚"), ("9", "过路人")]
+
+
+def test_candidate_name_falls_back_to_user_id(monkeypatch, tmp_path):
+    timeline = []
+    calls = install_bet_stub(monkeypatch, timeline)
+    prepare_message_path(monkeypatch, tmp_path, timeline)
+
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=2, card="", nickname="")))
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1)))
+
+    assert calls[1]["candidates"] == [("1", "阿岚"), ("2", "2")]
 
 
 def test_stale_speaker_is_filtered_from_candidates(monkeypatch, tmp_path):
@@ -158,7 +183,7 @@ def test_stale_speaker_is_filtered_from_candidates(monkeypatch, tmp_path):
 
     run_handler(plugin.handle_message(DummyBot(), make_event(user_id=2)))
     make_stale_speaker("2")
-    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1)))
+    run_handler(plugin.handle_message(DummyBot(), make_event(user_id=1, card="浅夏柚子")))
 
     assert [call["candidates"] for call in calls] == [
         [("2", "阿岚")],

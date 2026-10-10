@@ -279,35 +279,57 @@ def test_bet_recent_minutes_is_clamped(monkeypatch, configured, expected):
 def test_record_recent_speaker_marks_member_recent(monkeypatch):
     monkeypatch.setattr(rank_service, "_recent_speakers", {})
 
-    rank_service.record_recent_speaker("10001", "1")
+    rank_service.record_recent_speaker("10001", "1", "浅夏柚子")
 
-    assert [
-        info["user_id"] for info in rank_service.filter_recent_members(sample_rank_data(), "10001", 5)
-    ] == ["1"]
-    assert rank_service.filter_recent_members(sample_rank_data(), "20002", 5) == []
+    assert rank_service.get_recent_speakers("10001", 5) == [{"user_id": "1", "name": "浅夏柚子"}]
+    assert rank_service.get_recent_speakers("20002", 5) == []
 
 
-def test_filter_recent_members_drops_stale_speakers(monkeypatch):
+def test_recent_speaker_keeps_latest_nickname(monkeypatch):
     monkeypatch.setattr(rank_service, "_recent_speakers", {})
-    rank_service.record_recent_speaker("10001", "1")
-    rank_service._recent_speakers[("10001", "2")] = time.monotonic() - 5 * 60 - 1
 
-    assert [
-        info["user_id"] for info in rank_service.filter_recent_members(sample_rank_data(), "10001", 5)
-    ] == ["1"]
+    rank_service.record_recent_speaker("10001", "1", "旧昵称")
+    rank_service.record_recent_speaker("10001", "1", "新昵称")
+
+    assert rank_service.get_recent_speakers("10001", 5) == [{"user_id": "1", "name": "新昵称"}]
 
 
-def test_filter_recent_members_window_boundary(monkeypatch):
+def test_recent_speaker_name_falls_back_to_user_id(monkeypatch):
+    monkeypatch.setattr(rank_service, "_recent_speakers", {})
+
+    rank_service.record_recent_speaker("10001", "1", "")
+
+    assert rank_service.get_recent_speakers("10001", 5) == [{"user_id": "1", "name": "1"}]
+
+
+def test_get_recent_speakers_drops_stale_speakers(monkeypatch):
+    monkeypatch.setattr(rank_service, "_recent_speakers", {})
+    rank_service.record_recent_speaker("10001", "1", "浅夏柚子")
+    rank_service._recent_speakers[("10001", "2")] = (time.monotonic() - 5 * 60 - 1, "阿岚")
+
+    assert rank_service.get_recent_speakers("10001", 5) == [{"user_id": "1", "name": "浅夏柚子"}]
+
+
+def test_get_recent_speakers_window_boundary(monkeypatch):
     monkeypatch.setattr(rank_service, "time", FakeClock(1000.0))
     monkeypatch.setattr(
         rank_service,
         "_recent_speakers",
-        {("10001", "1"): 1000.0 - 5 * 60, ("10001", "2"): 1000.0 - 5 * 60 - 1},
+        {
+            ("10001", "1"): (1000.0 - 5 * 60, "浅夏柚子"),
+            ("10001", "2"): (1000.0 - 5 * 60 - 1, "阿岚"),
+        },
     )
 
-    assert [
-        info["user_id"] for info in rank_service.filter_recent_members(sample_rank_data(), "10001", 5)
-    ] == ["1"]
+    assert rank_service.get_recent_speakers("10001", 5) == [{"user_id": "1", "name": "浅夏柚子"}]
+
+
+def test_get_recent_speakers_lists_latest_first(monkeypatch):
+    monkeypatch.setattr(rank_service, "_recent_speakers", {})
+    rank_service.record_recent_speaker("10001", "2", "阿岚")
+    rank_service.record_recent_speaker("10001", "1", "浅夏柚子")
+
+    assert [info["user_id"] for info in rank_service.get_recent_speakers("10001", 5)] == ["1", "2"]
 
 
 def test_recent_speaker_table_is_pruned(monkeypatch):
@@ -316,10 +338,10 @@ def test_recent_speaker_table_is_pruned(monkeypatch):
     monkeypatch.setattr(
         rank_service,
         "_recent_speakers",
-        {("10001", "1"): stale, ("10001", "2"): stale},
+        {("10001", "1"): (stale, "浅夏柚子"), ("10001", "2"): (stale, "阿岚")},
     )
 
-    rank_service.record_recent_speaker("10001", "3")
+    rank_service.record_recent_speaker("10001", "3", "用户三")
 
     assert list(rank_service._recent_speakers) == [("10001", "3")]
 
