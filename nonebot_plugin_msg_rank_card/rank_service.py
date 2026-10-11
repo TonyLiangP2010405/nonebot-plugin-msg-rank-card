@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 from nonebot import get_driver
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
@@ -16,13 +14,6 @@ from .config import Config
 from .data_source import get_period_rank_data
 
 RANK_NOTE_SCENE = "msg_rank_card.rank"
-
-DAILY_RANK_CACHE_SECONDS = 30
-MIN_BET_RECENT_MINUTES = 1
-MAX_BET_RECENT_MINUTES = 120
-RECENT_SPEAKER_PRUNE_THRESHOLD = 2048
-_daily_rank_cache: dict[str, tuple[float, list[dict]]] = {}
-_recent_speakers: dict[tuple[str, str], tuple[float, str]] = {}
 
 PERIOD_TITLES = {
     "daily": "今日水群排行榜",
@@ -48,10 +39,6 @@ def get_plugin_config() -> Config:
 
 def get_max_count() -> int:
     return max(1, min(get_plugin_config().msg_rank_max_count, 10))
-
-
-def get_bet_recent_minutes() -> int:
-    return max(MIN_BET_RECENT_MINUTES, min(get_plugin_config().msg_rank_bet_recent_minutes, MAX_BET_RECENT_MINUTES))
 
 
 def get_rank_for_period(group_id: str, period: str) -> list[dict]:
@@ -121,79 +108,6 @@ async def _get_affection_note(group_id: str, user_id: str) -> str:
     except Exception as error:
         logger.debug(f"[msg-rank-card] 读取馒头短评失败: {error}")
         return ""
-
-
-def get_cached_daily_rank(group_id: str) -> list[dict]:
-    """带短 TTL 缓存的日榜查询：每条群消息都要判断发言者是否在榜，避免反复读数据文件。"""
-    now = time.monotonic()
-    cached = _daily_rank_cache.get(group_id)
-    if cached is not None and now - cached[0] < DAILY_RANK_CACHE_SECONDS:
-        return cached[1]
-    rank_data = get_rank_for_period(group_id, "daily")
-    _daily_rank_cache[group_id] = (now, rank_data)
-    return rank_data
-
-
-def get_member_daily_rank(group_id: str, user_id: str) -> list[dict] | None:
-    """成员当前在日榜上时返回日榜数据，不在榜上返回 None。"""
-    rank_data = get_cached_daily_rank(group_id)
-    if any(str(info["user_id"]) == user_id for info in rank_data):
-        return rank_data
-    return None
-
-
-def record_recent_speaker(group_id: str, user_id: str, name: str) -> None:
-    """记录成员最近一次发言的时间与昵称，供博弈选人使用（内存级，重启后重建）。"""
-    now = time.monotonic()
-    _recent_speakers[(group_id, user_id)] = (now, name)
-    if len(_recent_speakers) > RECENT_SPEAKER_PRUNE_THRESHOLD:
-        cutoff = now - MAX_BET_RECENT_MINUTES * 60
-        for key, (last_spoke, _) in list(_recent_speakers.items()):
-            if last_spoke < cutoff:
-                del _recent_speakers[key]
-
-
-def get_recent_speakers(group_id: str, minutes: int) -> list[dict]:
-    """取最近 minutes 分钟内发过言的成员作为博弈候选（不要求上榜），最近发言的排前面。"""
-    cutoff = time.monotonic() - minutes * 60
-    recent = [
-        (last_spoke, user_id, name)
-        for (member_group_id, user_id), (last_spoke, name) in _recent_speakers.items()
-        if member_group_id == group_id and last_spoke >= cutoff
-    ]
-    recent.sort(reverse=True)
-    return [{"user_id": user_id, "name": name or user_id} for _, user_id, name in recent]
-
-
-async def try_start_bet(
-    group_id: str | None,
-    user_id: str,
-    *,
-    nickname: str = "",
-    rank_data: list[dict] | None = None,
-    send: Callable[..., Awaitable[Any]] | None = None,
-) -> bool:
-    """请馒头插件按概率触发「馒头博弈」，未安装馒头或调用失败时返回 False。"""
-    if not group_id or send is None:
-        return False
-    if get_plugin_by_module_name("nonebot_plugin_mantou_affection") is None:
-        return False
-    candidates = [(str(info["user_id"]), str(info["name"])) for info in rank_data or []]
-    try:
-        from nonebot_plugin_mantou_affection import maybe_start_bet
-
-        return bool(
-            await maybe_start_bet(
-                group_id,
-                user_id,
-                nickname=nickname,
-                candidates=candidates,
-                send=send,
-            )
-        )
-    except Exception as error:
-        logger.debug(f"[msg-rank-card] 触发馒头博弈失败: {error}")
-        return False
 
 
 async def generate_rank_card(

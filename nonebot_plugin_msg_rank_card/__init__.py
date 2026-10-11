@@ -17,14 +17,9 @@ from .data_source import (
 from .rank_service import (
     build_report_message,
     generate_rank_card,
-    get_bet_recent_minutes,
     get_broadcast_text,
     get_max_count,
-    get_member_daily_rank,
     get_rank_for_period,
-    get_recent_speakers,
-    record_recent_speaker,
-    try_start_bet,
 )
 
 require("nonebot_plugin_apscheduler")
@@ -74,28 +69,12 @@ weekly_schedule_cmd = on_command("周榜定时", permission=SUPERUSER, priority=
 monthly_schedule_cmd = on_command("月榜定时", permission=SUPERUSER, priority=10, block=True)
 
 
-async def _maybe_start_bet(event: GroupMessageEvent, send) -> None:
-    """榜上成员发言时请馒头插件按概率触发博弈，不在榜上或未安装馒头时静默跳过。"""
-    group_id = str(event.group_id)
-    user_id = str(event.user_id)
-    if get_member_daily_rank(group_id, user_id) is None:
-        return
-    await try_start_bet(
-        group_id,
-        user_id,
-        nickname=event.sender.card or event.sender.nickname or user_id,
-        rank_data=get_recent_speakers(group_id, get_bet_recent_minutes()),
-        send=send,
-    )
-
-
 @msg_handler.handle()
 async def handle_message(bot: Bot, event: GroupMessageEvent):
     group_id = str(event.group_id)
     user_id = str(event.user_id)
     user_name = event.sender.nickname or "未知用户"
 
-    record_recent_speaker(group_id, user_id, event.sender.card or event.sender.nickname or "")
     max_count = get_max_count()
     notify_enabled = is_rank_change_notify_enabled(group_id)
 
@@ -115,19 +94,19 @@ async def handle_message(bot: Bot, event: GroupMessageEvent):
         logger.warning(f"记录消息失败: {e}")
         return
 
-    if rank_changed:
-        try:
-            rank_data = get_rank_for_period(group_id, "daily")
-            image_bytes = await generate_rank_card(rank_data, "daily", group_id)
-            await bot.send(
-                event,
-                f"{get_broadcast_text('daily')}\n当前检测到排名变化，重新发送最新榜单：",
-            )
-            await bot.send(event, MessageSegment.image(image_bytes))
-        except Exception as e:
-            logger.error(f"发送排名变动提醒失败: {e}")
+    if not rank_changed:
+        return
 
-    await _maybe_start_bet(event, msg_handler.send)
+    try:
+        rank_data = get_rank_for_period(group_id, "daily")
+        image_bytes = await generate_rank_card(rank_data, "daily", group_id)
+        await bot.send(
+            event,
+            f"{get_broadcast_text('daily')}\n当前检测到排名变化，重新发送最新榜单：",
+        )
+        await bot.send(event, MessageSegment.image(image_bytes))
+    except Exception as e:
+        logger.error(f"发送排名变动提醒失败: {e}")
 
 
 @rank_cmd.handle()
